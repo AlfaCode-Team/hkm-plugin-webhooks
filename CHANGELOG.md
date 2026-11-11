@@ -4,6 +4,18 @@ All notable changes to `hkm-plugin-webhooks` are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-11-11
+
+### Changed
+
+- **Requires kernel `^1.21.0`.** This plugin uses `EventBus::ALL`, which ships in kernel
+  1.21.0 and exists in no earlier release. The previous floor let a resolver
+  install it onto a kernel where that symbol is absent, which is a fatal at
+  autoload rather than a missing feature — the plugin would not degrade, it
+  would stop the application from booting.
+- No behaviour changes. This release exists to make the declared floor match
+  what the code actually needs.
+
 ## [Unreleased]
 
 ### Added

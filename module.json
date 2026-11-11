@@ -1,7 +1,7 @@
 {
     "name": "webhooks",
-    "version": "0.1.0",
-    "kernel": "^1.20.0",
+    "version": "0.2.0",
+    "kernel": "^1.21.0",
     "solves": "webhook.delivery",
     "type": "module",
 
