@@ -1,0 +1,71 @@
+{
+    "name": "webhooks",
+    "version": "0.1.0",
+    "kernel": "^1.20.0",
+    "solves": "webhook.delivery",
+    "type": "module",
+
+    "requires": ["http.client"],
+
+    "exposes": [
+        "Plugins\\Webhooks\\API\\Contracts\\WebhookContract"
+    ],
+
+    "routes": [],
+    "emits": [],
+    "listens": ["*"],
+    "files": [],
+
+    "documentation": "Delivers application events to HTTP endpoints somebody registered. Subscribes to EventBus::ALL, matches each event against the registered patterns, and queues one signed delivery per matching endpoint. Deliveries are attempted by `webhooks:deliver` with exponential backoff; an endpoint that keeps failing is paused, and one that answers 410 Gone is disabled. Bodies are signed HMAC-SHA256 over `{timestamp}.{body}` so a captured delivery cannot be replayed forever.",
+
+    "//kernel-floor": "Needs EventBus::ALL, which is a 1.20 addition. On an older kernel subscribe() would register a listener under the literal name \"*\", nothing would ever match it, and the plugin would install cleanly and deliver nothing at all.",
+
+    "//listens": "\"*\" is this module's declaration that it subscribes to EventBus::ALL. It cannot enumerate names: they belong to OTHER plugins, and this is installed precisely because nobody knows in advance what the application emits.",
+
+    "//pair-with-the-outbox": "The subscription fires at DISPATCH time, which is after the commit — so an event dispatched straight to the EventBus is lost if the process dies before the listener queues its deliveries. Writing it to `event.outbox` instead closes that: the event row commits with the state change, the relay dispatches it, and if this listener throws, EventBus::dispatch() reports the failure and the outbox re-queues rather than consuming. The listener therefore deliberately does NOT catch.",
+
+    "//the-url-came-from-a-user": "Which makes every HTTP default wrong. The delivery gateway passes `block_private => true` so the client's SSRF guard refuses private and reserved ranges and PINS the connection to the addresses it checked — without that, a tenant could register http://169.254.169.254/latest/meta-data/ and read IAM credentials back out of the delivery log. It also lowers `max_response_bytes`, because a receiver's reply is read only to log an excerpt, and sets `retry => 0` because THIS plugin owns retrying with persistence and backoff.",
+
+    "//registration-validation-is-advisory": "The URL checks in WebhookService are advisory ONLY, and that is not a gap to close there: DNS can change between the moment a URL is saved and the moment it is fetched, so no check at registration can be authoritative about where the request ends up. They catch the honest mistake while the person can still fix it; the delivery-time guard is the control.",
+
+    "//no-routes": "Endpoint management is authenticated, authorised and usually tenant-scoped, and every application models that differently. The application exposes its own admin routes and calls WebhookContract, rather than inheriting opinions about who may register a webhook. Registering is also absent from the CLI on purpose: it mints a secret that must be shown once, and a CLI would put it in shell history.",
+
+    "commands": [
+        "Plugins\\Webhooks\\Infrastructure\\Cli\\WebhookDeliverCommand",
+        "Plugins\\Webhooks\\Infrastructure\\Cli\\WebhookStatusCommand",
+        "Plugins\\Webhooks\\Infrastructure\\Cli\\WebhookEndpointsCommand",
+        "Plugins\\Webhooks\\Infrastructure\\Cli\\WebhookRetryCommand",
+        "Plugins\\Webhooks\\Infrastructure\\Cli\\WebhookPruneCommand"
+    ],
+
+    "schedule": [
+        {
+            "name": "webhooks.deliver",
+            "at": "* * * * *",
+            "command": "webhooks:deliver --quiet-when-idle",
+            "withoutOverlapping": true,
+            "expiresAfter": 300
+        },
+        {
+            "name": "webhooks.prune",
+            "at": "23 4 * * *",
+            "command": "webhooks:prune --yes",
+            "withoutOverlapping": true,
+            "expiresAfter": 3600
+        }
+    ],
+
+    "config": [
+        { "key": "WEBHOOKS_TIMEOUT", "type": "int", "required": false, "default": 15 },
+        { "key": "WEBHOOKS_BATCH", "type": "int", "required": false, "default": 50 },
+        { "key": "WEBHOOKS_MAX_ATTEMPTS", "type": "int", "required": false, "default": 10 },
+        { "key": "WEBHOOKS_BACKOFF_BASE", "type": "int", "required": false, "default": 60 },
+        { "key": "WEBHOOKS_BACKOFF_MAX", "type": "int", "required": false, "default": 3600 },
+        { "key": "WEBHOOKS_PAUSE_AFTER_FAILURES", "type": "int", "required": false, "default": 10 },
+        { "key": "WEBHOOKS_CLAIM_TIMEOUT", "type": "int", "required": false, "default": 300 },
+        { "key": "WEBHOOKS_PRUNE_AFTER_DAYS", "type": "int", "required": false, "default": 7 },
+        { "key": "WEBHOOKS_SIGNATURE_TOLERANCE", "type": "int", "required": false, "default": 300 },
+        { "key": "WEBHOOKS_REQUIRE_HTTPS", "type": "bool", "required": false, "default": true },
+        { "key": "WEBHOOKS_ALLOW_PRIVATE", "type": "bool", "required": false, "default": false }
+    ]
+}
